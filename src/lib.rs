@@ -34,6 +34,9 @@ pub mod procedures;
 pub mod query_planner;
 pub mod render_plan;
 pub mod server;
+pub use crate::server::query_context::{
+    get_unwind_element_is_string, set_unwind_element_is_string,
+};
 pub mod sql_generator;
 pub mod translate;
 

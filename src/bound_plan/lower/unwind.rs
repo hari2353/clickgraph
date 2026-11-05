@@ -718,6 +718,34 @@ impl<'s> Lowerer<'s> {
     }
 
     /// `UNWIND expr AS var`.
+    /// Whether an UNWIND's element is a string (for the #962 UTF-8
+    /// upgrade of `size()` / `reverse()` over an UNWIND element). (#1419)
+    fn unwind_element_is_string(&self, expr: &LogicalExpr) -> bool {
+        match expr {
+            LogicalExpr::List(xs) => {
+                !xs.is_empty()
+                    && xs
+                        .iter()
+                        .all(|x| matches!(x, LogicalExpr::Literal(lx::Literal::String(_))))
+            }
+            LogicalExpr::PropertyAccessExp(pa) => {
+                if let (PropertyValue::Column(p), Some(v)) =
+                    (&pa.column, parse_var(&pa.table_alias.0))
+                {
+                    self.declared_types(v, p).iter().all(|t| {
+                        matches!(
+                            t,
+                            Some(crate::graph_catalog::schema_types::SchemaType::String)
+                        )
+                    }) && !self.declared_types(v, p).is_empty()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+
     pub(super) fn unwind(&mut self, expr: &LogicalExpr, var: VarId) -> Result<(), LowerError> {
         let Some(spelling) = current_function_mapper().unwind() else {
             return unsupported("UNWIND in this SQL dialect");
@@ -762,6 +790,11 @@ impl<'s> Lowerer<'s> {
             _ => e,
         };
         let element = kind.element();
+        // Track whether the UNWIND element is a string, so `size()` /
+        // `reverse()` of an UNWIND element upgrade to their UTF-8 variants
+        // (the #962 upgrade cannot type a TableAlias on its own). (#1419)
+        let is_string = self.unwind_element_is_string(expr);
+        crate::set_unwind_element_is_string(is_string);
         let list = match kind {
             Kind::List(_) => e,
             // The list of the value, or of none when it is NULL.

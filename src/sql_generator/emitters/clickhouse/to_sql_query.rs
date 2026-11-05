@@ -709,7 +709,12 @@ pub(crate) fn clickhouse_utf8_string_fn(
     }
     let arg = arg?;
     let is_string = super::type_inference::infer_render_type(arg)
-        == Some(super::type_inference::RenderType::String);
+        == Some(super::type_inference::RenderType::String)
+        // #1419: an UNWIND element renders as a column reference whose
+        // type `infer_render_type` cannot resolve; track it via the query
+        // context when the element is a string.
+        || (matches!(arg, RenderExpr::PropertyAccessExp(_) | RenderExpr::TableAlias(_))
+            && crate::server::query_context::get_unwind_element_is_string());
     if !is_string {
         return None;
     }

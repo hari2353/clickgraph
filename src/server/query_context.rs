@@ -52,6 +52,12 @@ pub struct QueryContext {
     /// notably unit tests — keep emitting CH SQL unchanged.
     pub dialect: SqlDialect,
 
+    /// Whether the current UNWIND element is a string (set during UNWIND
+    /// lowering). Drives `size()`/`reverse()` UTF-8 upgrades for an UNWIND
+    /// element, which `infer_render_type` cannot type (it is a TableAlias).
+    /// (#1419)
+    pub unwind_element_is_string: bool,
+
     /// Schema name for this query (from USE clause or request parameter)
     pub schema_name: Option<String>,
 
@@ -322,6 +328,19 @@ pub fn set_current_dialect(dialect: SqlDialect) {
     let _ = QUERY_CONTEXT.try_with(|ctx| {
         ctx.borrow_mut().dialect = dialect;
     });
+}
+/// Set whether the current UNWIND element is a string (#1419).
+pub fn set_unwind_element_is_string(value: bool) {
+    let _ = QUERY_CONTEXT.try_with(|ctx| {
+        ctx.borrow_mut().unwind_element_is_string = value;
+    });
+}
+
+/// Read whether the current UNWIND element is a string (#1419).
+pub fn get_unwind_element_is_string() -> bool {
+    QUERY_CONTEXT
+        .try_with(|ctx| ctx.borrow().unwind_element_is_string)
+        .unwrap_or(false)
 }
 
 // ============================================================================
